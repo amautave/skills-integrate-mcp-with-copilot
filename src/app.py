@@ -5,11 +5,15 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+import json
 import os
+import tempfile
+from copy import deepcopy
 from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -19,8 +23,7 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
 
-# In-memory activity database
-activities = {
+DEFAULT_ACTIVITIES = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -77,6 +80,42 @@ activities = {
     }
 }
 
+ACTIVITIES_FILE = Path(
+    os.environ.get("ACTIVITIES_FILE", current_dir / "activities.json")
+)
+
+
+def load_activities(path=None):
+    if path is None:
+        path = ACTIVITIES_FILE
+
+    if not path.exists():
+        return deepcopy(DEFAULT_ACTIVITIES)
+
+    with path.open(encoding="utf-8") as activities_file:
+        return json.load(activities_file)
+
+
+def save_activities(data, path=None):
+    if path is None:
+        path = ACTIVITIES_FILE
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as activities_file:
+        json.dump(data, activities_file, indent=2)
+        temporary_path = Path(activities_file.name)
+
+    temporary_path.replace(path)
+
+
+activities = load_activities()
+
 
 @app.get("/")
 def root():
@@ -107,6 +146,7 @@ def signup_for_activity(activity_name: str, email: str):
 
     # Add student
     activity["participants"].append(email)
+    save_activities(activities)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
@@ -129,4 +169,5 @@ def unregister_from_activity(activity_name: str, email: str):
 
     # Remove student
     activity["participants"].remove(email)
+    save_activities(activities)
     return {"message": f"Unregistered {email} from {activity_name}"}
