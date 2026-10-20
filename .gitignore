@@ -41,3 +41,7 @@ __pycache__
 
 # Env files
 .env
+
+# Local activity signup data
+/src/activities.json
+/src/.activities.json.*.tmp
